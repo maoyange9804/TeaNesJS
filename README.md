@@ -2,7 +2,7 @@
 
 又一种新的预编译 javascript 脚本语言，用一种友好的方式开发面向客户端的 javascript 程序。
 
-### 安装 OR [TEST REPL](http://wl879.github.io/TeaJS/)
+### 安装 OR [TEST REPL](https://github.com/maoyange9804/tea-js-yyds.git)
 
 
 ```
