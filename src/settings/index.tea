@@ -1,0 +1,28 @@
+	
+var Tea = require "../core";
+
+/**
+ * Define token map
+ */
+
+for name, value in require("./token.js"):
+	Tea.define('token', name, value);
+
+/**
+ * Define grammar map
+ */
+for name, value in require("./syntax/"):
+	Tea.define('syntax', name, value);
+
+require('../core/node').map = require('./node');
+
+/**
+ * Define scope map
+ */
+for name, value in require("./scope.js"):
+	Tea.define('scope', name, value);
+/**
+ * Define standard map
+ */
+for name, value in require("./standards/es5/index.js"):
+	Tea.define('es5', name, value);

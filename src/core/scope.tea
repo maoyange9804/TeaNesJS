@@ -1,0 +1,447 @@
+
+export default class Scope:
+	
+	var Node            = require "./node";
+	var scope_name_map  = {};
+	var scope_state_map = {};
+	var scope_tar_map   = {};
+	var decl_types      = ["function", 'class', "static", "proto", 'argument'];
+	
+	constructor(type, node, parent):
+		@.type      = type;
+		@.target    = node;
+		@.name      = null;
+		@.variables = {};
+		@.undefines = {};
+		@.subs      = [];
+
+		if @.type == 'ClassScope':
+			@.protos  = {};
+			@.statics  = {};
+
+		if parent:
+			@.upper = parent;
+
+	get upper():
+		return @.__upper__;
+
+	set upper( parent ):
+		@.__upper__ = parent;
+		if parent.subs.indexOf(@) == -1:
+			parent.subs.push(@);
+		return @.__upper__;
+
+	get valid():
+		scope = @;
+		while scope.type == 'LetScope':
+			scope = scope.upper;
+		return scope;
+
+	get parent():
+		upper = @;
+		while upper = upper.upper:
+			if upper.type == 'LetScope':
+				continue;
+			break;
+		return upper;
+
+	query(name):
+		scope = @;
+		while scope && (scope.type != name && scope.name != name ):
+			scope = scope.upper;
+		return scope;
+
+	define(state, target, alias):
+		if state.isNode || state.isToken:
+			alias = target, target = state, state = null;
+		
+		ids   = formatIdArray(target);
+		(state = state || checkStateMep(ids)) || return;
+
+		switch state:
+			case 'function', 'class':
+				@.name = ids[0].text;
+				defineState( @.parent, ids, state, alias);
+
+			case 'proto', 'static':
+				scope = @.valid;
+				if scope.type != 'ClassScope':
+					scope = scope.parent;
+				if scope.type != 'ClassScope':
+					Tea.error 1002, state, ids;
+				defineState( scope, ids, state, alias);
+
+			case 'let':
+				defineState( @, ids, state, alias);
+			
+			case 'const', 'var', 'argument':
+				defineState( @.valid, ids, state, alias);
+
+			case 'undefined', 'unknow':
+				if ids[0].parent && ids[0].parent.query('ConditionExpr'):
+					defineState( @.upper, ids, state, alias);
+				else:
+					defineState( @, ids, state, alias);
+
+			default:
+				if /\blet\b/.test(state):
+					defineState( @, ids, state, alias);
+				else:
+					defineState( @.valid, ids, state, alias);
+		return state;
+
+	check(target, level = 0):
+		ids   = formatIdArray(target);
+		state = checkStateMep(ids);
+		if state && /class|function|proto|static|const|var|let|argument/.test(state):
+			@.define(state, ids);
+			return @;
+
+		if level.isScope:
+			stop = level;
+			level = 0;
+		uns = [];
+
+		
+		for id => ids:
+			if _state = checkState(@, id, level, stop):
+				@.variables[id.text] = [ /undefined|var/.test(_state[0]) ? 'unknow' : _state[0], _state[1] ];
+			else:
+				uns.push( id );
+
+		if uns.length:
+			state = state || 'unknow';
+			uns.type = ids.type;
+			@.define( state, uns );
+		return @;
+
+	state(target, level = 0):
+		ids    = formatIdArray(target);
+		states = [];
+		if level.isScope:
+			stop = level;
+			level = 0;
+		for id => ids:
+			if _state = checkState(@, id, level, stop):
+				states.push( _state[0] );
+			else:
+				states.push( null );
+		if target.isToken || target as 'string':
+			return states[0];
+		return states;
+
+	alias(target, level = 0):
+		ids   = formatIdArray(target);
+		alias = [];
+		if level.isScope:
+			stop = level;
+			level = 0;
+		for id => ids:
+			id.alias = null;
+			if _state = checkState(@, id, level, stop):
+				alias.push( _state[1] );
+				if _state[1]:
+					id.alias = _state[1];
+			else:
+				alias.push(null)
+		if target.isToken || target as 'string':
+			return alias[0];
+		return alias;
+
+	member(target):
+		if class_scope = @.query('ClassScope'):
+			ids   = formatIdArray(target);
+			types = [];
+			for id => ids:
+				if id.text in class_scope.protos:
+					types.push('proto');
+				else if id.text in class_scope.statics:
+					types.push('static');
+			if target.isToken || target as 'string':
+				return types[0];
+			return types;
+
+	undefineds( check ):
+		for sub => @.subs:
+			if sub.type == 'LetScope':
+				sub.undefineds(true);
+
+		if @.type == 'LetScope':
+			unds = @.undefines;
+			for name in unds:
+				if upper = checkStateScope( @.upper, {text:name}, 1 ):
+					upper.undefines[name] = unds[name];
+					delete unds[name];
+
+		return check ? @.undefines : Jsop.toArray( @.undefines );
+
+	createVariable(name = 'i', state, deep = true):
+		if name.isNode ||name.isToken:
+			if deep:
+				deep = [name];
+			name = name.text;
+
+		if name.length == 1:
+			name_dic = 'abcdefghijklmnopqrstuvwxyz';
+			i = [].indexOf.call(name_dic, name);
+		else:
+			i = 0;
+		_name = name;
+		while checkVariableName( _name, @, deep ):
+			if name_dic:
+				_name = name_dic[++i];
+			else:
+				_name = name+'_'+(i++);
+		if state:
+			@.define( state || 'undefined', _name);
+		return _name;
+
+	@::isScope = true;
+
+	static init(node):
+		return initScope(node);
+
+	static test(node):
+		return !!scope_state_map[node.type];
+
+	static state(node):
+		state = node.scope && node.scope.state(node);
+		if state && state.length:
+			return state;
+		return checkStateMep(node);
+
+	static define(name, value):
+		if /\w+Scope$/.test(name):
+			scope_name_map[name] = value.trim().split(/ +/);
+			return;
+
+		list = SText.split(value, /<-*/, false);
+		if list.length > 1:
+			value = list[-1];
+			r_list = list.slice(0, -1);
+
+		list = SText.split(value, /-*>/, false);
+		if r_list:
+			r_list.push( list[0] );
+			r_list.reverse();
+			scope_tar_map[name] = {};
+			setTargetMep( r_list, scope_tar_map[name]);
+
+		setStateMep(list, scope_state_map, name);
+
+	/**
+	 * 
+	 */
+
+	function setStateMep(list, map, name):
+		if !list.length:
+			return map.name = name;
+		list  = list.slice();
+		mark  = list.shift();
+		if /-*>/.test( mark ):
+			parents = map['parents'] || (map['parents'] = {});
+			types = list.shift().trim().split(/ +/);
+		else:
+			types    = mark.trim().split(/ +/);
+			mark     = null;
+			parents = map;
+
+		for type => types:
+			if m = type.match(/\[(\d)\]$/):
+				type = type.substr(0, type.length-m[0].length);
+			if Node.map[type]:
+				for sub => Node.map[type]:
+					types.push( sub+(m && m[0] || '') );
+				continue;
+			parents[type] |= {};
+			parents[type].testIndex = m[1] if m;
+			if mark == '-->':
+				map.tops |= [];
+				map.tops.push(type);
+			else if mark == '>':
+				setStateMep(list, map, name);
+			setStateMep(list, parents[type], name);
+
+	function setTargetMep(list, map, test):
+		if !list.length:
+			return map.test = test || false;
+		list  = list.slice();
+
+		mark  = list.shift();
+		if /<-*/.test( mark ):
+			children = map['children'] || (map['children'] = {});
+			types = list.shift().trim().split(/ +/);
+		else:
+			types    = mark.trim().split(/ +/);
+			mark     = null;
+			children = map;
+			
+		for type => types:
+			if m = type.match(/\[(\d)\]$/):
+				type = type.substr(0, type.length-m[0].length);
+			if Node.map[type]:
+				for sub => Node.map[type]:
+					types.push( sub+(m && m[0] || '') );
+				continue;
+
+			children[type] |= {};
+			children[type].getIndex = m[1] if m;
+
+			if mark == '<':
+				setTargetMep(list, map, true);
+
+			setTargetMep(list, children[type]);
+
+	/**
+	 * 
+	 */
+
+	function checkScopeMap(node):
+		type = node.type || node;
+		for key in scope_name_map:
+			if scope_name_map[key].indexOf(type) != -1:
+				return key;
+
+	function checkStateMep(node, map):
+		if !map:
+			if sub = scope_state_map[node.type]:
+				type = checkStateMep(node, sub);
+				return type;
+			return;
+
+		if not parent = node.parent:
+			return map.name;
+
+		while /sequence/i.test(parent.type):
+			parent = parent.parent;
+		
+		if  map.parents && sub = map.parents[parent.type]:
+			if !sub.testIndex || node.index == sub.testIndex:
+				ref = checkStateMep(parent, sub);
+				return ref;
+
+		if map.tops:
+			return checkMapInTop(node, map);
+
+		if map.name:
+			return map.name;
+
+	function checkMapInTop(node, map):
+		tops = map.tops;
+		parent = node.parent;
+		while parent:
+			if type = parent.is.apply(parent, tops):
+				return checkStateMep(parent, map.parents[type]);
+			if type = checkScopeMap(parent) && type != 'LetScope':
+				break;
+			parent = parent.parent;
+		if map.name:
+			return map.name;
+
+	function checkTargetMep(node, map):
+		if children = map.children:
+			tars = [];
+			for sub => node:
+				if children[sub.type]:
+					tars.push( checkTargetMep(sub, children[sub.type]) );
+				else map.test:
+					tars.push( sub );
+			return tars;
+		else:
+			if map.getIndex:
+				return map.getIndex ? node[map.getIndex] : null;
+			return map.test ? node : null;
+	/**
+	 * 
+	 */
+	
+	function initScope(node, scope):
+		if !scope:
+			// print(scope_state_map);
+			scope   = new Scope( checkScopeMap(node) || 'RootScope', node );
+			node.scope = scope;
+
+		for sub => node:
+			if type = checkScopeMap(sub):
+				sub.scope = new Scope(type, sub, scope);
+				initScope(sub, sub.scope);
+			else:
+				sub.scope = scope;
+				if scope_state_map[ sub.type ]:
+					if type = checkStateMep(sub, scope_state_map[ sub.type ]):
+						if decl_types.indexOf( type ) != -1:
+							scope.define( type, sub );
+				if sub.isNode:
+					initScope(sub, scope);
+		return node.scope;
+	
+	function formatIdArray(ids):
+		if ids.isNode || Array.isArray(ids):
+			return ids;
+		if ids.isToken:
+			return ids.parent;
+		return [{text: ids}]
+	
+	function defineState(scope, ids, state, alias):
+		switch state:
+			case 'proto':
+				variables = scope.protos;
+			case 'static':
+				variables = scope.statics;
+			default:
+				variables = scope.variables;
+
+		if scope_tar_map[state] &&  scope_tar_map[state][ids.type]:
+			if not ids = checkTargetMep(ids, scope_tar_map[state][ids.type]):
+				return;
+
+		for id => ids:
+			if !id:
+				continue;
+			name = id.text;
+			if name in variables:
+				exist = variables[name];
+				if exist[0] == 'const':
+					Tea.error 1003, vars;
+				if state == 'undefined' || state == 'unknow' || exist[0] == state:
+					continue;
+			else if state.indexOf('undefined') != -1:
+				scope.undefines[name] = id.isToken ? id : name;
+			_alias = alias ? alias.replace(/\$/g, name) : (state == 'let' ? scope.createVariable(id, 'let random') : null);
+			variables[name] = [state, _alias];
+
+	/**
+	 * 
+	 */
+
+	function checkStateScope(scope, id, level, stop):
+		while scope:
+			if id.text in scope.variables:
+				return scope;
+			scope = scope.upper;
+			if scope && (scope.type  == 'LetScope' || scope != stop || --level):
+				continue;
+			break;
+
+	function checkState(scope, id, level, stop):
+		if scope = checkStateScope(scope, id, level, stop):
+			return scope.variables[ id.text ];
+
+	function checkVariableName(name, scope, deep):
+		if not state = scope.state(name):
+			if deep && node = scope.target:
+				!Array.isArray(deep) && deep = null;
+				node.each(function(target, indexs){
+					if deep && deep.indexOf(target) != -1:
+						return 0;
+					type = target.type;
+					if target.scope.type == 'FunctionScope' || type == 'MemberExpr':
+						return 0;
+					if type == 'IDENTIFIER' || type == 'KEYWORD':
+						if target.text == name:
+							state = 'unknow';
+							return false;
+				});
+		if state == 'let undefined ref':
+			return false;
+		return state;

@@ -1,0 +1,74 @@
+
+module.exports = function(heap, node, params):
+	if node.type == 'From':
+		return parseFromExpr.call(@, node, params);
+	return parseRequireExpr.call(@, node, params);
+
+function parseFromExpr(node, params):
+	params = parseRequireParams.call(@, node, node[0].location.fileName);
+	return @.card('RequireExpr', 'require', '(', params[0], ')' )
+
+function parseRequireExpr(node, params):
+	params = parseRequireParams.call(@, node[1], node[0].location.fileName);
+	list   = [];
+	for name => params:
+		list.push( @.card('RequireExpr', node[0], '(', name, ')' ) );
+
+	if list.length == 1:
+		return list[0];
+
+	switch node.parent.type:
+		case 'BlockNode', 'Root':
+			for i, item -> list:
+				list[i] = @.card('VarExpr', 'var ', moduleName(item[2]), ' = ', item);
+			return @.card('List', list);
+		case 'JsonDest':
+			for i, item -> list:
+				list[i] = @.card('PropertyInit', moduleName(item[2]), ' : ', item);	
+			return @.transform('{#join(@)}', list, 'JsonExpr');
+		default:
+			return @.transform('[#join(@)]', list, 'ArrayExpr');
+
+function parseRequireParams(node, from):
+	list = [];
+	dir  = Fp.dirName(from);
+	for i, item -> node:
+		if item.is('STRING'):
+			if /\/|\*/.test(item.text):
+				file_list = checkRequireFile(item.text, dir);
+				if file_list.length:
+					for data => file_list:
+						list.push( data.name.replace(/\.tea$/, '.js') );
+					continue;
+			list.push( item );
+		else:
+			list.push( @.transform(item) );
+	return list;
+
+function checkRequireFile(name, dir):
+	filebase = Fp.resolve(dir, name).replace(/\.(tea|js)$|\/+$/, '');
+	for exe => ['', '.tea', '.js', '/index.tea', '/index.js']:
+		file = filebase + exe;
+		if Fp.isFile(file):
+			return [{name: name, file: file}];
+
+	list  = [];
+	exits  = {};
+	files = Fp.checkFiles(name, dir, ['index.js', 'index.tea']);
+	if !files.error:
+		for file => files:
+			_name = file.replace(/\.(tea|js)$/, '');
+			if !exits[_name] || /\.js$/.test(file):
+				exits[_name] = file;
+				list.push( {name : Fp.relative(dir, file), file: file} );
+	return list;
+
+function moduleName(node, prefix = ''):
+	file = node.text || node;
+	if file:
+		file = file.replace(/^['"]+|['"]+$|\.[^\.\/\\]*$|/g, '');
+		name = Fp.baseName(file);
+		if name == 'index':
+			name = Fp.baseName( Fp.dirName(file) );
+		name = (prefix + name).replace(/[^\w\$]+/ig, '_').replace(/_[a-z]/g, ($0) => $0[1].toUpperCase());
+		return name;

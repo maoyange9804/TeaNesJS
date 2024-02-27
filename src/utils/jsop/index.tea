@@ -1,0 +1,142 @@
+// javascript object parser
+
+SText = require "../stext";
+
+var _slice_ = [].slice;
+var hasOwnProperty = ({}).hasOwnProperty;
+
+export default jsop( str ):
+	if arguments.length == 0:
+		return jsop.data();
+	return jsop.parse(str);
+
+export parse( str ):
+	if /^\[.*?\]$/.test(str):
+		list = SText.split(str.slice(1, -1), /;|,/, true);
+		for i -> list:
+			if /(\d+)(\.\d*)?|false|true|null|undefined/.test(list[i]):
+				list[i] = eval('('+list[i]+')');
+		return list;
+
+	if /^\{.*?\}$/.test(str):
+		str = str.slice(1, -1);
+	list = SText.split(str, /;|,/, true);
+	json = {};
+	for item => list:
+		i = item.indexOf(':')
+		if i > 0:
+			key = item.substr(0, i).trim();
+			val = item.substr(i+1).trim();
+			if /^\[.*?\]$|^\{.*?\}$/.test(val):
+				val = jsop( val );
+		else:
+			key = item;
+			val = true;
+		json[key] = val
+	return json;
+
+export data():
+	json = {
+		constructor          : undefined,
+		toString             : undefined,
+		toLocaleString       : undefined,
+		valueOf              : undefined,
+		hasOwnProperty       : undefined,
+		isPrototypeOf        : undefined,
+		propertyIsEnumerable : undefined,
+		__defineGetter__     : undefined,
+		__lookupGetter__     : undefined,
+		__defineSetter__     : undefined,
+		__lookupSetter__     : undefined,
+		__proto__            : undefined
+	};
+	return json;
+
+export keys(obj):
+	return Object.keys(obj);
+
+export toArray(obj, start, end):
+	if obj.length == null:
+		temp = [];
+		for key in obj:
+			temp.push( obj[key] );
+		obj = temp;
+	return _slice_.call(obj, start, end);
+
+export join(obj, separator = ','):
+	splice = [].splice;
+	for i = obj.length - 1; i > 0; i--:
+		splice.call(obj, i, 0, separator);
+	return obj;
+
+export concat(obj):
+	arguments[0] = copy(obj) || {};
+	return extend.apply(@, arguments);
+
+export extend(obj):
+	for i = 1, arg -> arguments:
+		if arg:
+			for k => Object.getOwnPropertyNames(arg):
+				obj[k] = arg[k];
+	return obj;
+
+export copy(obj, deep = 1):
+	if obj as 'object':
+		if Array.isArray(obj):
+			clone = [];
+		else:
+			clone = {};
+			if clone.prototype != obj.prototype:
+				clone.prototype = obj.prototype;
+				clone.constructor = obj.constructor;
+		for key in obj:
+			clone[key] = deep ? copy(obj[key], deep -1) : obj[key];
+		return clone;
+	else:
+		return obj;
+
+export reverse(obj):
+	r = {};
+	for key, val -> obj:
+		r[val] |= [];
+		r[val].push(key);
+	return r;
+
+export newClass(cls, argus):
+	obj = Object.create( cls.prototype );
+	if argus.length:
+		cls.apply( obj, argus );
+	return obj;
+
+export eq(obj1, obj2):
+	if obj1 == obj2:
+		return true;
+	if not obj1 as 'object':
+		return false;
+	if obj1.constructor != obj2.constructor:
+		return false;
+	for k in obj1:
+		if eq(obj1[k], obj2[k]) == false:
+			return false;
+	return true;
+
+export isJson(obj):
+	return !obj.constructor || obj.constructor.prototype.hasOwnProperty("isPrototypeOf");
+
+export isEmpty(obj):
+	for k in obj:
+		return false;
+	return true;
+
+export isClass(obj, class_name):
+	if obj && obj.constructor:
+		if class_name && typeof class_name != 'string':
+			return obj.constructor == class_name;
+		if obj.constructor.toString:
+			if name = funcName(obj.constructor):
+	            return class_name ? class_name == name : name;
+    return undefined;
+
+export funcName(fn):
+	if fn && m = fn.toString().match(/function\s*(\w+)/):
+		return m[1];

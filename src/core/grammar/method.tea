@@ -1,0 +1,137 @@
+
+export caller_is(heap, src, params, config):
+	if !config.inited:
+		config.test   = true;
+		config.inited = true;
+		params.level = /-\d+/.test(params[0]) ? parseInt(params.shift()) : 0;
+
+	level  = params.level;
+	caller = heap.get('parent');
+	while caller && level ++:
+		while /block|comma/i.test(caller.id):
+			caller = caller.parent;
+		caller = caller.parent;
+	return params.indexOf( caller.id ) !=- 1;
+
+export has_param(heap, src, params, config):
+	config.test = true;
+	argus       = heap.get('params');
+	if params && argus:
+		for item => params:
+			if argus.indexOf(item) != -1:
+				return true;
+	return false;
+
+export is_token(heap, src, params, config):
+	if !config.inited:
+		config.inited = true;
+		if m = params[0].match(/^([\+\-]{1,2})(\d+)/):
+			params.mode = [m[1], parseInt(m[2]), 0];
+			params.shift();
+		else:
+			params.mode = [0, 0, 0];
+		if params.mode[1]:
+			config.test = true;
+
+	index = moveIndex(src, params.mode);
+	if not token = src[index]:
+		return false;
+	if params.indexOf( token.text ) != -1:
+		return token;
+	if token.is.apply(token, params):
+		return token;
+	return false;
+
+export not_token(heap, src, params, config):
+	if !config.inited:
+		config.inited = true;
+		if m = params[0].match(/^([\+\-]{1,2})(\d+)/):
+			params.mode = [m[1], parseInt(m[2]), 0];
+			params.shift();
+		else:
+			params.mode = [0, 0, 0];
+		if params.mode[1]:
+			config.test = true;
+
+	index = moveIndex(src, params.mode);
+	if not token = src[index]:
+		return false;
+	if params.indexOf( token.text ) != -1:
+		return false;
+	if token.is.apply(token, params):
+		return false;
+	return token;
+
+export before(heap, src, params, config):
+	if !config.inited:
+		config.inited = true;
+		config.test   = true;
+		if /(parent|before|last|-?\d+)/.test(params[0]):
+			params[1] = params.slice(1);
+			params[0] = params[0].split('.').map(($) => parseInt($)||$);
+		else:
+			params[1] = params.slice();
+			params[0] = ['last'];
+
+	asss  = params[0];
+	for i, item -> asss:
+		switch item:
+			case 'parent':
+				heap = heap.parent;
+				if heap && i == asss.length -1:
+					left = heap.matchcache[-1];
+			case 'before':
+				left = heap.parent && heap.parent.matchcache[-1];
+			case 'last':
+				left = heap.matchcache[-1];
+			default:
+				left = heap.matchcache[ item < 0 ? heap.matchcache.length + item : item ];
+
+	if left && left.is:
+		return !!left.is.apply(left, params[1]);
+	return false;
+
+export sugar_box(heap, src, params, config):
+	// TODO: check point
+	if not sugarBox = @.sugarBox || not name = params[0]:
+		return false;
+
+	if map = sugarBox[name]:
+		for name, sugar in map:
+			if node = @.parse( sugar, params ):
+				return node;
+		return false;
+
+	if sugar = sugarBox.get( params[0] ):
+		if node = @.parse( sugar, params ):
+			return node;
+	return false;
+
+export check_indent(heap, src, params, config):
+	start_indent = heap.get('startIndent');
+	if start_indent == null:
+		start_indent = heap.set('startIndent', src.lineIndent( heap.get('startIndex') ));
+	switch params[0]:
+		case 'in':
+			return start_indent < src.lineIndent();
+		case 'out':
+			return start_indent > src.lineIndent();
+		default:
+			return start_indent == src.lineIndent();
+	return false;
+
+function moveIndex(src, data):
+	index = src.index;
+	if data:
+		num   = data[1];
+		while --num >= 0:
+			switch data[0]:
+				case '++':
+					index ++;
+				case '+': default:
+					index = src.nextIndex( index, !data.lf);
+				case '--':
+					index --;
+				case '-':
+					index = src.prevIndex( index, !data.lf);
+	return index;

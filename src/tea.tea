@@ -1,0 +1,98 @@
+#define VER {
+#script
+if pk = SText.readFile('./package.json'):
+	if m = pk.match(/\"version\"\s*:\s*\"([\w\.]+)\"/):
+		write m[1];
+#end
+}
+
+if typeof global == 'undefined':
+	if typeof window == 'undefined':
+		throw 'Tea script run environment error!';
+	window.global = window;
+
+global.SText   = require "./utils/stext";
+global.Jsop    = require "./utils/jsop";
+global.print   = require "./utils/print";
+global.Fp      = require "./utils/fp";
+// global.TeaPack      = require "../utils/teapack";
+
+var Helper     = require "./helper";
+var Argv       = require("./utils/argv")
+                 
+
+global.Tea     = require "./core";
+
+Tea.filename = __filename;
+
+Tea.version  = "VER";
+
+Tea.inNode   = typeof process != 'undefined';
+
+Tea.argv     = Argv.create(null,
+					#script
+					if md = SText.readFile('./README.md'):
+						if m = md.match(/```console([\w\W]*?)```/):
+							write '"""        * <r:TeaJS:> version <g:VER:>'+m[1]+'"""';
+					#end
+				);
+
+Tea.create = function(file, text, sugar_box, stdv):
+				return new Tea(file, text, sugar_box, stdv);
+
+Tea.compile = function(text, sugar_box, from, stdv):
+				ctx = new Tea(from, text, sugar_box, stdv);
+				return ctx.output();
+
+Tea.ID      = function():
+				Tea.ID.index |= 0;
+				return parseInt((Date.now()+'').substr(-8)+(Tea.ID.index++)+Math.round( Math.random()*100) )+'';
+
+Tea.log     = function():
+				if Tea.argv['--verbose']:
+					Tea.log = Helper.log;
+					Tea.log.apply( null, arguments);
+
+Tea.error   = function():
+				arguments[arguments.length++] = new Error();
+				throw Helper.error( arguments );
+
+/**
+ * 
+ */
+Tea.tabsize   = function(num):
+				SText.tabsize = SText.cope(' ', num);
+
+Tea.exit     = function(state = 0):
+				print '* <r:TeaJS:> exit - Used time <b:'+Tea.uptime('ms')+':>';
+				process.exit( state );
+
+Tea.uptime   = function(unit):
+				t = process.uptime();
+				switch unit:
+					case 's':
+						return t+'s';
+					case 'ms':
+						return t*1000+'ms';
+				return t*1000;
+
+Tea.memory   = function(unit):
+				data = process.memoryUsage();
+				rss = data.rss;
+				switch unit:
+					case 'kb':
+						return Math.floor(data.rss*100/1024)/100 + ' KB';
+					case 'mb':
+						return Math.floor(data.rss*100/1024/1024)/100 + ' MB';
+				return rss;
+
+require "./settings";
+
+// global.__checkGlobal = function():
+// 	var def = 'global process GLOBAL root console Path Tea Fp'.split(' ');
+// 	for name in global:
+// 		if def.indexOf(name) >= 0:
+// 			continue;
+// 		if typeof global[name] == 'function':
+// 			continue;
+// 		print('[Global scope pollution]', name, global[name]);

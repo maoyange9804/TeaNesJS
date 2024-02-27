@@ -1,0 +1,30 @@
+
+VAR:
+    build  : /usr/local/bin/node $ROOT/build.js
+    test   : $ROOT/test
+    plugin : $ROOT/plugin
+    tml    : TeaJS.tmLanguage
+    node   : /usr/local/bin/node
+    bin    : /usr/local/bin/node $ROOT/bin/tea.js
+    lib    : /usr/local/bin/node $ROOT/lib/index.js
+    y2p    : $ROOT/plugin/y2p.rb
+
+DEBUG: refresh
+
+LISTENER:
+    -   CMD: $build lib $FILE
+        WATCH: src/[(?!utils)]*.tea
+    -   CMD: $build util $FILE
+        WATCH: src/utils/*.[(js|tea)]
+
+    # packaging
+    -   CMD: $build packaging
+        WATCH: package.json
+    # test
+    -   CMD: $bin -f $FILE -o $FILEDIR -v --test
+        WATCH: test/[*/].tea
+    -   CMD: $node $test/index.js $FILE
+        WATCH: src/*.tea
+
+    -   CMD: $y2p $FILE > $FILEDIR/TeaJS.sublime-plugin/TeaJS.tmLanguage
+        WATCH: plugin/TeaJS.tmLanguage.yaml
