@@ -3,7 +3,7 @@ VAR:
     build  : /usr/local/bin/node $ROOT/build.js
     test   : $ROOT/test
     plugin : $ROOT/plugin
-    tml    : TeaJS.tmLanguage
+    tml    : TeaNewJS.tmLanguage
     node   : /usr/local/bin/node
     bin    : /usr/local/bin/node $ROOT/bin/tea.js
     lib    : /usr/local/bin/node $ROOT/lib/index.js
@@ -26,5 +26,5 @@ LISTENER:
     -   CMD: $node $test/index.js $FILE
         WATCH: src/*.tea
 
-    -   CMD: $y2p $FILE > $FILEDIR/TeaJS.sublime-plugin/TeaJS.tmLanguage
-        WATCH: plugin/TeaJS.tmLanguage.yaml
+    -   CMD: $y2p $FILE > $FILEDIR/TeaNewJS.sublime-plugin/TeaNewJS.tmLanguage
+        WATCH: plugin/TeaNewJS.tmLanguage.yaml
