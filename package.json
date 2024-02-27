@@ -1,12 +1,12 @@
 {
-	"name"        : "tea-js",
-	"version"     : "0.2.1",
-	"author"      : "Liang Wang",
+	"name"        : "tea-new-js",
+	"version"     : "1.0.1",
+	"author"      : "Mao Yan Ge",
 	"description" : "Unfancy JavaScript like coffeescript",
 	"keywords"    : ["javascript", "language", "teascript", "compiler" ],
 	"repository"  : {
         "type"    : "git",
-        "url"     : "https://github.com/wl879/TeaJS.git"
+        "url"     : "https://github.com/maoyange9804/TeaNesJS.git"
     },
 	"devDependencies" : {
 		"source-map"  : "*",
